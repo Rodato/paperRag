@@ -45,94 +45,220 @@ def _inject_css() -> None:
     st.markdown(
         """
         <style>
-        /* Layout general */
-        .main .block-container { padding-top: 2.5rem; max-width: 1080px; }
-        h1, h2, h3 { letter-spacing: -0.015em; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap');
 
-        /* Sidebar */
-        [data-testid="stSidebar"] { background: #FAFAFC; }
+        :root {
+            --pr-bg: #FFFFFF;
+            --pr-surface: #FAFAF7;
+            --pr-surface-2: #F3F2EC;
+            --pr-border: #E8E6DE;
+            --pr-border-strong: #D8D6CB;
+            --pr-ink: #1B1B22;
+            --pr-ink-soft: #44444F;
+            --pr-muted: #8A8A93;
+            --pr-accent: #4F46E5;
+            --pr-accent-ink: #3730A3;
+            --pr-accent-soft: #EEF0FF;
+            --pr-radius: 14px;
+            --pr-radius-sm: 10px;
+            --pr-shadow-sm: 0 1px 2px rgba(20,20,40,0.04);
+            --pr-shadow-md: 0 8px 28px rgba(28,26,40,0.08);
+            --pr-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --pr-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+        }
+
+        /* Tipografía base — NO usar [class*="st-"] para no pisar la fuente
+           de íconos (Material Symbols) de Streamlit. */
+        html, body, .stApp { font-family: var(--pr-sans); }
+        .stApp { background: var(--pr-bg); color: var(--pr-ink); }
+        /* Preservar la fuente de íconos pase lo que pase */
+        [data-testid="stIconMaterial"],
+        span[data-testid="stIconMaterial"],
+        .material-icons, .material-symbols-rounded, .material-symbols-outlined {
+            font-family: 'Material Symbols Rounded', 'Material Icons' !important;
+        }
+
+        /* Header transparente, sin barra gris */
+        [data-testid="stHeader"] { background: transparent; }
+
+        /* Layout general */
+        .main .block-container { padding-top: 2rem; padding-bottom: 4rem; max-width: 1000px; }
+        h1, h2, h3, h4 { letter-spacing: -0.01em; color: var(--pr-ink); }
+
+        /* ---------- Sidebar ---------- */
+        [data-testid="stSidebar"] {
+            background: var(--pr-surface);
+            border-right: 1px solid var(--pr-border);
+        }
         [data-testid="stSidebar"] .stButton > button {
             text-align: left;
             font-weight: 500;
         }
+        .pr-wordmark {
+            display: flex; align-items: baseline; gap: 2px;
+            font-family: var(--pr-serif);
+            font-size: 1.5rem; font-weight: 600;
+            color: var(--pr-ink); letter-spacing: -0.02em;
+            margin: 0.2rem 0 0.1rem;
+        }
+        .pr-wordmark .pr-wm-accent { color: var(--pr-accent); }
+        .pr-wordmark-sub {
+            font-size: 0.78rem; color: var(--pr-muted);
+            margin-bottom: 0.4rem; letter-spacing: 0.01em;
+        }
 
-        /* Hero / empty state */
-        .pr-hero { text-align: center; padding: 2.5rem 1rem 2rem; }
+        /* ---------- Empty state / hero ---------- */
+        .pr-hero { padding: 2.5rem 0 1.25rem; max-width: 680px; }
+        .pr-eyebrow {
+            font-size: 0.72rem; font-weight: 600; letter-spacing: 0.14em;
+            text-transform: uppercase; color: var(--pr-accent);
+            margin-bottom: 0.7rem;
+        }
         .pr-hero-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 0.6rem;
-            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-family: var(--pr-serif);
+            font-size: 2.9rem; font-weight: 600; line-height: 1.05;
+            letter-spacing: -0.025em; color: var(--pr-ink);
+            margin-bottom: 0.7rem;
         }
         .pr-hero-sub {
-            font-size: 1.05rem;
-            color: #6B7280;
-            max-width: 620px;
-            margin: 0 auto 1.5rem;
-            line-height: 1.55;
+            font-size: 1.08rem; color: var(--pr-ink-soft);
+            max-width: 560px; line-height: 1.6;
         }
 
-        /* Pills / badges */
+        /* ---------- Pills / badges ---------- */
         .pr-pill {
-            display: inline-block;
-            font-size: 0.72rem;
-            background: #EEF2FF;
-            color: #4338CA;
-            padding: 3px 10px;
-            border-radius: 999px;
-            font-weight: 500;
-            margin-right: 6px;
+            display: inline-flex; align-items: center;
+            font-size: 0.74rem; font-weight: 500;
+            background: var(--pr-accent-soft); color: var(--pr-accent-ink);
+            padding: 4px 11px; border-radius: 999px; margin-right: 6px;
+            border: 1px solid rgba(79,70,229,0.12);
         }
-        .pr-pill-muted { background: #F3F4F6; color: #6B7280; }
+        .pr-pill-muted {
+            background: var(--pr-surface-2); color: var(--pr-muted);
+            border-color: var(--pr-border);
+        }
 
-        /* Borde más prolijo en st.container(border=True) */
+        /* ---------- Cards (st.container border=True) ---------- */
         [data-testid="stVerticalBlockBorderWrapper"] {
-            border-radius: 14px !important;
-            border-color: #E5E7EB !important;
-            transition: border-color 0.15s, box-shadow 0.15s;
+            border-radius: var(--pr-radius) !important;
+            border-color: var(--pr-border) !important;
+            box-shadow: var(--pr-shadow-sm);
+            transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
         }
         [data-testid="stVerticalBlockBorderWrapper"]:hover {
-            border-color: #C7D2FE !important;
-            box-shadow: 0 4px 16px rgba(79, 70, 229, 0.07);
+            border-color: var(--pr-border-strong) !important;
+            box-shadow: var(--pr-shadow-md);
+            transform: translateY(-2px);
         }
 
-        /* Paper activo en sidebar */
+        /* ---------- Paper activo (sidebar) ---------- */
         .pr-active-paper {
-            background: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 100%);
-            border: 1px solid #C7D2FE;
-            border-radius: 12px;
-            padding: 14px 16px;
-            margin-bottom: 12px;
+            background: var(--pr-bg);
+            border: 1px solid var(--pr-border);
+            border-left: 3px solid var(--pr-accent);
+            border-radius: var(--pr-radius-sm);
+            padding: 13px 15px; margin-bottom: 12px;
+            box-shadow: var(--pr-shadow-sm);
         }
         .pr-active-paper-label {
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: #4F46E5;
+            font-size: 0.66rem; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--pr-accent);
             font-weight: 600;
         }
         .pr-active-paper-title {
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: #1E1B4B;
-            line-height: 1.3;
-            margin-top: 4px;
+            font-family: var(--pr-serif);
+            font-size: 1rem; font-weight: 600; color: var(--pr-ink);
+            line-height: 1.32; margin-top: 4px;
+        }
+
+        /* ---------- Paper view header ---------- */
+        .pr-doc-eyebrow {
+            font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--pr-muted);
+            margin-bottom: 0.4rem;
+        }
+        .pr-doc-title {
+            font-family: var(--pr-serif);
+            font-size: 2rem; font-weight: 600; line-height: 1.15;
+            letter-spacing: -0.02em; color: var(--pr-ink);
+            margin-bottom: 0.8rem;
+        }
+
+        /* ---------- Library card title ---------- */
+        .pr-card-title {
+            font-family: var(--pr-serif);
+            font-size: 1.08rem; font-weight: 600; line-height: 1.3;
+            color: var(--pr-ink); margin-bottom: 2px;
+        }
+
+        /* ---------- Section label ---------- */
+        .pr-section-label {
+            font-size: 0.74rem; font-weight: 600; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--pr-muted);
+        }
+
+        /* ---------- Inputs ---------- */
+        [data-testid="stTextInput"] input {
+            border-radius: var(--pr-radius-sm) !important;
+            border-color: var(--pr-border-strong) !important;
+            font-size: 0.98rem !important;
+        }
+        [data-testid="stTextInput"] input:focus {
+            border-color: var(--pr-accent) !important;
+            box-shadow: 0 0 0 3px rgba(79,70,229,0.12) !important;
+        }
+
+        /* ---------- Buttons ---------- */
+        .stButton > button, .stDownloadButton > button {
+            border-radius: var(--pr-radius-sm) !important;
+            font-weight: 500 !important;
+            transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+        }
+        .stButton > button[kind="primary"],
+        [data-testid="stBaseButton-primary"],
+        [data-testid="stFormSubmitButton"] button {
+            background: var(--pr-accent) !important;
+            border-color: var(--pr-accent) !important;
+            box-shadow: 0 1px 2px rgba(79,70,229,0.25);
+        }
+        .stButton > button[kind="primary"]:hover,
+        [data-testid="stBaseButton-primary"]:hover,
+        [data-testid="stFormSubmitButton"] button:hover {
+            background: var(--pr-accent-ink) !important;
+            border-color: var(--pr-accent-ink) !important;
+            box-shadow: 0 4px 14px rgba(79,70,229,0.28);
+            transform: translateY(-1px);
+        }
+
+        /* ---------- Expander ---------- */
+        [data-testid="stExpander"] details {
+            border-radius: var(--pr-radius-sm) !important;
+            border-color: var(--pr-border) !important;
+        }
+        [data-testid="stExpander"] summary { font-weight: 500; }
+
+        /* ---------- Metric ---------- */
+        [data-testid="stMetric"] {
+            background: var(--pr-surface);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius-sm);
+            padding: 12px 14px;
         }
 
         /* Form sin borde */
         [data-testid="stForm"] { border: none; padding: 0; }
 
-        /* Footer */
+        /* Divider más suave */
+        hr { border-color: var(--pr-border) !important; }
+
+        /* ---------- Footer ---------- */
         .pr-footer {
-            margin-top: 3rem;
-            padding-top: 1rem;
-            border-top: 1px solid #E5E7EB;
-            color: #9CA3AF;
-            font-size: 0.8rem;
-            text-align: center;
+            margin-top: 3.5rem; padding-top: 1.1rem;
+            border-top: 1px solid var(--pr-border);
+            color: var(--pr-muted); font-size: 0.8rem;
+            display: flex; align-items: center; gap: 6px;
         }
+        .pr-footer .pr-dot { color: var(--pr-border-strong); }
         </style>
         """,
         unsafe_allow_html=True,
@@ -410,8 +536,11 @@ def _confirm_delete_dialog(paper_dir: Path, title: str) -> None:
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.markdown("### 📄 paperRag")
-    st.caption("RAG con agentes para papers científicos")
+    st.markdown(
+        "<div class='pr-wordmark'>paper<span class='pr-wm-accent'>Rag</span></div>"
+        "<div class='pr-wordmark-sub'>Análisis de referencias con agentes</div>",
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     if not config.OPENROUTER_KEY:
@@ -477,10 +606,11 @@ if paper is None:
     st.markdown(
         """
         <div class='pr-hero'>
-            <div class='pr-hero-title'>paperRag</div>
+            <div class='pr-eyebrow'>RAG con agentes · LangGraph</div>
+            <div class='pr-hero-title'>Conversá con la bibliografía de tus papers</div>
             <div class='pr-hero-sub'>
-                Subí un paper en PDF y consultá sobre sus referencias, secciones y argumentos.
-                Detecta tus papers ya procesados automáticamente.
+                Subí un PDF y consultá sobre sus referencias, secciones y argumentos.
+                paperRag detecta automáticamente los papers que ya procesaste.
             </div>
         </div>
         """,
@@ -500,7 +630,12 @@ if paper is None:
             """
         )
     else:
-        st.markdown(f"#### Tu biblioteca · {len(papers_in_disk)} papers")
+        st.markdown(
+            f"<div class='pr-section-label' style='margin-bottom:0.9rem'>"
+            f"Tu biblioteca · {len(papers_in_disk)} "
+            f"{'paper' if len(papers_in_disk) == 1 else 'papers'}</div>",
+            unsafe_allow_html=True,
+        )
 
         cols_per_row = 2
         for row_start in range(0, len(papers_in_disk), cols_per_row):
@@ -521,8 +656,11 @@ if paper is None:
                             continue
                         meta = item["meta"]
                         title = meta.get("paper_title", item["paper_dir"].name)
-                        short_title = title if len(title) <= 70 else title[:67] + "…"
-                        st.markdown(f"**{short_title}**")
+                        short_title = title if len(title) <= 80 else title[:77] + "…"
+                        st.markdown(
+                            f"<div class='pr-card-title'>{short_title}</div>",
+                            unsafe_allow_html=True,
+                        )
                         date_str = _format_processed_at(meta.get("processed_at", ""))
                         meta_line = f"📂 {len(meta.get('sections', []))} secciones · 🔖 {meta.get('faiss_chunks_count', '?')} secciones indexadas"
                         if date_str:
@@ -539,7 +677,11 @@ if paper is None:
 
 else:
     # ---------- Paper view ----------
-    st.markdown(f"## {paper['paper_title']}")
+    st.markdown(
+        f"<div class='pr-doc-eyebrow'>Paper activo</div>"
+        f"<div class='pr-doc-title'>{paper['paper_title']}</div>",
+        unsafe_allow_html=True,
+    )
     date_str = _format_processed_at(paper.get("processed_at", ""))
     pills = [
         f"<span class='pr-pill'>{paper['sections_count']} secciones</span>",
@@ -564,7 +706,10 @@ else:
     # ---------- Sugerencias ----------
     suggestions = _build_query_suggestions(paper["sections"], paper["resolved_references"])
     if suggestions:
-        st.caption("Sugerencias:")
+        st.markdown(
+            "<div class='pr-section-label' style='margin-bottom:0.5rem'>Sugerencias</div>",
+            unsafe_allow_html=True,
+        )
         sug_cols = st.columns(len(suggestions))
         for i, (col, suggestion) in enumerate(zip(sug_cols, suggestions)):
             if col.button(suggestion, key=f"sug_{i}", use_container_width=True):
@@ -616,7 +761,11 @@ else:
         # Citaciones con popover
         cited = _extract_cited_refs(latest["respuesta"])
         if cited:
-            st.markdown("##### Citas en esta respuesta")
+            st.markdown(
+                "<div class='pr-section-label' style='margin:0.6rem 0 0.4rem'>"
+                "Citas en esta respuesta</div>",
+                unsafe_allow_html=True,
+            )
             cite_cols = st.columns(min(len(cited), 6))
             for i, ref_num in enumerate(cited):
                 with cite_cols[i % len(cite_cols)]:
@@ -683,4 +832,11 @@ else:
                         st.caption(" · ".join(extras))
                     st.divider()
 
-st.markdown("<div class='pr-footer'>paperRag · RAG con LangGraph</div>", unsafe_allow_html=True)
+st.markdown(
+    "<div class='pr-footer'>"
+    "<span style='font-family:var(--pr-serif);font-weight:600'>paperRag</span>"
+    "<span class='pr-dot'>·</span> RAG con agentes LangGraph "
+    "<span class='pr-dot'>·</span> Modelos vía OpenRouter"
+    "</div>",
+    unsafe_allow_html=True,
+)
