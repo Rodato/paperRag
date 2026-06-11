@@ -366,6 +366,7 @@ def _process_uploaded(uploaded_file) -> None:
             processing_model=config.PROCESSING_MODEL,
             embedding_model=config.EMBEDDING_MODEL,
             on_progress=on_progress,
+            original_filename=uploaded_file.name,
         )
         if result:
             paper_dir = config.DATA_DIR / result["sanitized_name"]
@@ -565,8 +566,8 @@ else:
     if suggestions:
         st.caption("Sugerencias:")
         sug_cols = st.columns(len(suggestions))
-        for col, suggestion in zip(sug_cols, suggestions):
-            if col.button(suggestion, key=f"sug_{hash(suggestion)}", use_container_width=True):
+        for i, (col, suggestion) in enumerate(zip(sug_cols, suggestions)):
+            if col.button(suggestion, key=f"sug_{i}", use_container_width=True):
                 st.session_state["query_text"] = suggestion
                 st.rerun()
 
@@ -582,24 +583,27 @@ else:
 
     query = st.session_state["query_text"]
     if submitted and query.strip():
-        with st.spinner("Procesando consulta…"):
-            try:
-                app = _get_or_build_agent()
-                result = agent_module.run_query(app, query.strip())
-                paper_dir = Path(paper["paper_dir"])
-                enriched = append_to_history(
-                    paper_dir,
-                    result,
-                    model_name=st.session_state["selected_model"],
-                )
-                st.session_state["query_history"].insert(0, enriched)
-                st.session_state["clear_query_after_submit"] = True
-                st.rerun()
-            except Exception as e:
-                logger.exception("Falló run_query con query=%r", query)
-                st.error("No pudimos ejecutar la consulta. Probá de nuevo en un momento.")
-                with st.expander("Detalle técnico"):
-                    st.code(str(e))
+        try:
+            app = _get_or_build_agent()
+            with st.spinner("Buscando en el paper…"):
+                token_iter, finalize = agent_module.run_query_stream(app, query.strip())
+            st.markdown("### Respuesta")
+            answer = st.write_stream(token_iter)
+            result = finalize(answer)
+            paper_dir = Path(paper["paper_dir"])
+            enriched = append_to_history(
+                paper_dir,
+                result,
+                model_name=st.session_state["selected_model"],
+            )
+            st.session_state["query_history"].insert(0, enriched)
+            st.session_state["clear_query_after_submit"] = True
+            st.rerun()
+        except Exception as e:
+            logger.exception("Falló run_query con query=%r", query)
+            st.error("No pudimos ejecutar la consulta. Probá de nuevo en un momento.")
+            with st.expander("Detalle técnico"):
+                st.code(str(e))
 
     # ---------- Resultado más reciente ----------
     history_list = st.session_state["query_history"]

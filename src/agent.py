@@ -1,16 +1,24 @@
 """
 Agente LangGraph para consultas sobre papers científicos.
 
-Los 5 nodos son funciones closure que capturan los vectorstores,
-secciones y referencias resueltas — sin variables globales.
+El grafo cubre la fase de *recuperación* (analizar consulta → elegir
+vectorstore → extraer filtros → buscar). La *generación* de la respuesta
+se separa en un paso aparte para poder streamear los tokens en la UI.
+
+Los nodos son closures que capturan los vectorstores, secciones y
+referencias resueltas — sin variables globales.
 """
 
 import re
-from typing import Any, Dict, List, TypedDict
+from typing import Any, Callable, Dict, Iterator, List, NamedTuple, TypedDict
 
 from langgraph.graph import END, StateGraph
 
 from .utils import parse_refs_field
+
+# Cuánto contenido de cada chunk se inyecta al prompt de generación.
+CONTEXT_CHARS_PER_RESULT = 1_200
+MAX_CONTEXT_RESULTS = 5
 
 
 # ---------------------------------------------------------------------------
@@ -28,13 +36,23 @@ class AgentState(TypedDict):
     confidence: float
 
 
+class CompiledAgent(NamedTuple):
+    """Agente compilado: grafo de recuperación + generación streameable."""
+
+    retrieval: Any  # grafo LangGraph compilado (analyze → … → search)
+    build_prompt: Callable[[AgentState], str]
+    llm: Any
+
+
 # ---------------------------------------------------------------------------
 # Factory del grafo
 # ---------------------------------------------------------------------------
 
-def build_agent(chroma_store, faiss_store, sections: list, resolved_references: dict, query_llm):
+def build_agent(
+    chroma_store, faiss_store, sections: list, resolved_references: dict, query_llm
+) -> CompiledAgent:
     """
-    Compila el grafo LangGraph para un paper específico.
+    Compila el agente para un paper específico.
 
     Todos los nodos son closures que capturan los stores y metadatos
     del paper, evitando variables globales.
@@ -43,15 +61,17 @@ def build_agent(chroma_store, faiss_store, sections: list, resolved_references: 
     # ---- Nodo 1: Analizar consulta ----------------------------------------
     def analyze_query(state: AgentState) -> AgentState:
         query = state["query"].lower()
-        if any(w in query for w in ["secciones", "sections", "sección", "section"]) and \
-           any(w in query for w in ["referencia", "reference", "["]):
+        has_ref = bool(re.search(r"\[\d+\]", query)) or any(
+            w in query for w in ["referencia", "reference"]
+        )
+        if any(w in query for w in ["secciones", "sections", "sección", "section"]) and has_ref:
             query_type = "reference_sections"
         elif any(w in query for w in ["referencias", "references"]) and \
-             any(w in query for w in ["sección", "section"]):
+                any(w in query for w in ["sección", "section"]):
             query_type = "section_references"
-        elif "contexto" in query and any(w in query for w in ["referencia", "reference", "["]):
+        elif "contexto" in query and has_ref:
             query_type = "reference_context"
-        elif any(w in query for w in ["trata", "about", "resumen", "summary"]):
+        elif any(w in query for w in ["trata", "about", "resumen", "summary", "resumí", "resumi"]):
             query_type = "section_summary"
         else:
             query_type = "general_search"
@@ -85,11 +105,11 @@ def build_agent(chroma_store, faiss_store, sections: list, resolved_references: 
         query_lower = query.lower()
         filters: Dict[str, Any] = {}
 
-        # Detectar sección
-        for section in sections:
-            if section.lower() in query_lower:
-                filters["section_title"] = section
-                break
+        # Detectar sección: preferir el match más largo (más específico)
+        # para no quedarnos con "Results" cuando la query dice "Results and Discussion".
+        matched = [s for s in sections if s.lower() in query_lower]
+        if matched:
+            filters["section_title"] = max(matched, key=len)
 
         # Detectar referencia(s)
         ref_matches = re.findall(r"\[(\d+)\]", query)
@@ -143,8 +163,8 @@ def build_agent(chroma_store, faiss_store, sections: list, resolved_references: 
         state["confidence"] = min(len(search_results) / 5.0, 1.0)
         return state
 
-    # ---- Nodo 5: Generar respuesta ----------------------------------------
-    def generate_answer(state: AgentState) -> AgentState:
+    # ---- Generación (separada del grafo para poder streamear) -------------
+    def build_prompt(state: AgentState) -> str:
         query = state["query"]
         qt = state["query_type"]
         results = state["search_results"]
@@ -154,15 +174,18 @@ def build_agent(chroma_store, faiss_store, sections: list, resolved_references: 
         filters = state["search_filters"]
 
         context_parts = []
-        for i, result in enumerate(results[:4]):
+        for i, result in enumerate(results[:MAX_CONTEXT_RESULTS]):
             meta = result["metadata"]
+            content = result["content"]
+            if len(content) > CONTEXT_CHARS_PER_RESULT:
+                content = content[:CONTEXT_CHARS_PER_RESULT] + "…"
             context_parts.append(
                 f"RESULTADO {i+1}:\n"
                 f"Sección: {meta.get('section_title', 'N/A')}\n"
                 f"Referencias mencionadas: {meta.get('references_mentioned', 'Ninguna')}\n"
-                f"Contenido: {result['content'][:400]}...\n"
+                f"Contenido: {content}\n"
             )
-        context = "\n".join(context_parts)
+        context = "\n".join(context_parts) if context_parts else "(sin resultados relevantes)"
 
         relevant_refs = ""
         if "reference_number" in filters:
@@ -176,15 +199,28 @@ def build_agent(chroma_store, faiss_store, sections: list, resolved_references: 
                     "Aclará esto en tu respuesta.\n"
                 )
 
+        # Sin contexto recuperado: instruir explícitamente para evitar alucinaciones.
+        if not results:
+            return (
+                "Eres un asistente especializado en análisis de papers científicos.\n\n"
+                f"CONSULTA: {query}\n\n"
+                "No se encontró contenido relevante en el paper para esta consulta. "
+                "Respondé honestamente que no encontraste información en el documento "
+                "para responder esto, y sugerí reformular la pregunta (por ejemplo, "
+                "nombrando una sección o referencia específica). No inventes contenido."
+            )
+
         task_instructions = {
             "reference_sections": "Lista específicamente en qué secciones se menciona la referencia solicitada y proporciona el contexto de cada mención.",
             "section_references": "Lista todas las referencias citadas en la sección especificada, incluyendo sus números y contenido cuando sea posible.",
             "reference_context": "Explica el contexto específico en el que se usa la referencia, incluyendo cómo se relaciona con el argumento o metodología del paper.",
             "section_summary": "Proporciona un resumen comprensivo de lo que trata la sección, incluyendo sus puntos principales.",
         }
-        task_instruction = task_instructions.get(qt, "Responde la consulta de manera comprehensiva usando el contexto proporcionado.")
+        task_instruction = task_instructions.get(
+            qt, "Responde la consulta de manera comprehensiva usando el contexto proporcionado."
+        )
 
-        prompt = f"""Eres un asistente especializado en análisis de papers científicos.
+        return f"""Eres un asistente especializado en análisis de papers científicos.
 
 CONSULTA ORIGINAL: {query}
 TIPO DE CONSULTA: {qt}
@@ -203,52 +239,85 @@ REGLAS:
 1. Sé específico y preciso
 2. Si mencionas referencias, usa el formato [número]
 3. Incluye números de sección cuando sea relevante
-4. Si la información es limitada, sé honesto al respecto
+4. Responde ÚNICAMENTE con información presente en el contexto. Si el contexto no
+   alcanza para responder, dilo explícitamente en vez de inventar.
 5. Estructura tu respuesta de manera clara
 
 RESPUESTA:"""
 
-        response = query_llm.invoke(prompt)
-        state["final_answer"] = response.content
-        return state
-
-    # ---- Compilar grafo ---------------------------------------------------
+    # ---- Compilar grafo de recuperación -----------------------------------
     workflow = StateGraph(AgentState)
     workflow.add_node("analyze", analyze_query)
     workflow.add_node("select", select_vectorstore)
     workflow.add_node("extract", extract_filters)
     workflow.add_node("search", execute_search)
-    workflow.add_node("generate", generate_answer)
     workflow.set_entry_point("analyze")
     workflow.add_edge("analyze", "select")
     workflow.add_edge("select", "extract")
     workflow.add_edge("extract", "search")
-    workflow.add_edge("search", "generate")
-    workflow.add_edge("generate", END)
-    return workflow.compile()
+    workflow.add_edge("search", END)
 
-
-def run_query(app, query: str) -> Dict[str, Any]:
-    """Ejecuta una consulta contra el grafo compilado y retorna el resultado completo."""
-    result = app.invoke(
-        {
-            "query": query,
-            "query_type": "",
-            "vectorstore_choice": "",
-            "search_filters": {},
-            "search_results": [],
-            "final_answer": "",
-            "reasoning": "",
-            "confidence": 0.0,
-        }
+    return CompiledAgent(
+        retrieval=workflow.compile(),
+        build_prompt=build_prompt,
+        llm=query_llm,
     )
+
+
+# ---------------------------------------------------------------------------
+# Ejecución
+# ---------------------------------------------------------------------------
+
+def _initial_state(query: str) -> Dict[str, Any]:
     return {
-        "pregunta": query,
-        "tipo_consulta": result["query_type"],
-        "vectorstore_usado": result["vectorstore_choice"],
-        "razonamiento": result["reasoning"],
-        "filtros_aplicados": result["search_filters"],
-        "num_resultados": len(result["search_results"]),
-        "confianza": f"{result['confidence']:.1%}",
-        "respuesta": result["final_answer"],
+        "query": query,
+        "query_type": "",
+        "vectorstore_choice": "",
+        "search_filters": {},
+        "search_results": [],
+        "final_answer": "",
+        "reasoning": "",
+        "confidence": 0.0,
     }
+
+
+def _result_meta(state: Dict[str, Any], answer: str) -> Dict[str, Any]:
+    return {
+        "pregunta": state["query"],
+        "tipo_consulta": state["query_type"],
+        "vectorstore_usado": state["vectorstore_choice"],
+        "razonamiento": state["reasoning"],
+        "filtros_aplicados": state["search_filters"],
+        "num_resultados": len(state["search_results"]),
+        "confianza": f"{state['confidence']:.1%}",
+        "respuesta": answer,
+    }
+
+
+def run_query(agent: CompiledAgent, query: str) -> Dict[str, Any]:
+    """Ejecuta recuperación + generación (no streaming) y retorna el resultado."""
+    state = agent.retrieval.invoke(_initial_state(query))
+    answer = agent.llm.invoke(agent.build_prompt(state)).content
+    return _result_meta(state, answer)
+
+
+def run_query_stream(agent: CompiledAgent, query: str):
+    """Versión streaming.
+
+    Retorna `(token_iterator, finalize)`. Consumí `token_iterator` (cada
+    elemento es un fragmento de texto) y luego llamá `finalize(answer)` con
+    el texto completo para obtener el dict de resultado con su metadata.
+    """
+    state = agent.retrieval.invoke(_initial_state(query))
+    prompt = agent.build_prompt(state)
+
+    def token_iterator() -> Iterator[str]:
+        for chunk in agent.llm.stream(prompt):
+            text = getattr(chunk, "content", "") or ""
+            if text:
+                yield text
+
+    def finalize(answer: str) -> Dict[str, Any]:
+        return _result_meta(state, answer)
+
+    return token_iterator(), finalize

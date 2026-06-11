@@ -5,12 +5,17 @@ from typing import Any, Dict, List
 
 
 def sanitize_collection_name(name: str) -> str:
-    """Sanitiza nombres para compatibilidad con Chroma."""
+    """Sanitiza nombres para compatibilidad con Chroma.
+
+    Determinista: el fallback para nombres muy cortos usa un hash estable
+    (sha1) en vez de `hash()`, que cambia entre procesos por PYTHONHASHSEED.
+    """
     sanitized = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
     sanitized = re.sub(r"_+", "_", sanitized)
     sanitized = sanitized.strip("_.-")
     if len(sanitized) < 3:
-        sanitized = f"paper_{hash(name) % 10000}"
+        digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+        sanitized = f"paper_{digest}"
     if len(sanitized) > 50:
         sanitized = sanitized[:50].rstrip("_.-")
     return sanitized
@@ -25,11 +30,15 @@ def extract_references(text: str) -> List[str]:
         for part in parts:
             if "–" in part or "-" in part:
                 sep = "–" if "–" in part else "-"
+                bounds = part.split(sep)
+                if len(bounds) != 2:
+                    continue
                 try:
-                    start, end = map(int, part.split(sep))
-                    final_refs.update(str(i) for i in range(start, end + 1))
+                    start, end = int(bounds[0]), int(bounds[1])
                 except ValueError:
                     continue
+                if 0 <= start <= end and end - start <= 500:
+                    final_refs.update(str(i) for i in range(start, end + 1))
             elif part.isdigit():
                 final_refs.add(part)
     return sorted(final_refs, key=int)
@@ -78,11 +87,6 @@ def normalize_metadata(metadata: Dict) -> Dict:
         else:
             cleaned[key] = str(value)
     return cleaned
-
-
-# Alias retrocompatible — el nombre original sólo describía el caso Chroma,
-# pero ahora aplicamos la misma normalización a FAISS.
-clean_metadata_for_chroma = normalize_metadata
 
 
 def parse_refs_field(metadata: Dict) -> List[str]:
