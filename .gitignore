@@ -29,6 +29,9 @@ dist/
 .idea/
 *.swp
 
+# Claude Code (config de dev local, p. ej. launch.json con paths absolutos)
+.claude/
+
 # Streamlit
 .streamlit/secrets.toml
 

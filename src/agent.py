@@ -136,19 +136,28 @@ def build_agent(
         return [{"content": d.page_content, "metadata": d.metadata} for d in results]
 
     def _search_faiss(query: str, filters: Dict) -> List[Dict]:
+        # Con filtro de metadata (sección o referencia) NO dependemos del
+        # ranking de similitud: recuperamos directo del docstore y filtramos.
+        # Un paper tiene pocos chunks en FAISS (~secciones), pero el doc de
+        # la sección pedida puede no quedar entre los top-k por similitud, y
+        # filtrar-después-de-recuperar lo descartaría devolviendo 0 resultados.
+        if "section_title" in filters or "reference_number" in filters:
+            all_docs = faiss_store.docstore._dict.values()
+            filtered = []
+            for doc in all_docs:
+                if "section_title" in filters:
+                    if doc.metadata.get("section_title") != filters["section_title"]:
+                        continue
+                if "reference_number" in filters:
+                    if filters["reference_number"] not in parse_refs_field(doc.metadata):
+                        continue
+                filtered.append({"content": doc.page_content, "metadata": doc.metadata})
+                if len(filtered) >= 5:
+                    break
+            return filtered
+
         results = faiss_store.similarity_search(query, k=15)
-        filtered = []
-        for doc in results:
-            if "section_title" in filters:
-                if doc.metadata.get("section_title") != filters["section_title"]:
-                    continue
-            if "reference_number" in filters:
-                if filters["reference_number"] not in parse_refs_field(doc.metadata):
-                    continue
-            filtered.append({"content": doc.page_content, "metadata": doc.metadata})
-            if len(filtered) >= 5:
-                break
-        return filtered
+        return [{"content": d.page_content, "metadata": d.metadata} for d in results[:5]]
 
     # ---- Nodo 4: Ejecutar búsqueda ----------------------------------------
     def execute_search(state: AgentState) -> AgentState:
