@@ -270,6 +270,14 @@ def process_pdf(
             "Verifica que el PDF contiene texto legible y estructura de secciones reconocible."
         )
 
+    # `sections` (lista cruda del LLM) puede incluir headers padre cuyo texto
+    # vive entero en subsecciones: esos se descartan en _split_by_sections y
+    # NUNCA se indexan. Persistir esa lista cruda haría que la UI ofrezca
+    # secciones inexistentes y que el agente filtre por un section_title que
+    # no está en ningún vectorstore → 0 resultados garantizados. Usamos solo
+    # las secciones realmente indexadas, en orden de aparición.
+    indexed_sections = list(dict.fromkeys(s["title"] for s in sections_data))
+
     chroma_chunks = _chunks_for_chroma(sections_data, paper_name, paper_title)
     faiss_chunks = _chunks_for_faiss(sections_data, paper_name, paper_title)
 
@@ -300,7 +308,7 @@ def process_pdf(
         "paper_title": paper_title,
         "sanitized_name": sanitized_name,
         "collection_name": collection_name,
-        "sections": sections,
+        "sections": indexed_sections,
         "pdf_hash": pdf_hash,
         "processed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "processing_model": processing_model,
