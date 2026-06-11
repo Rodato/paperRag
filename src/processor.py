@@ -228,12 +228,18 @@ def process_pdf(
     pdf_hash: str,
     processing_model: str,
     embedding_model: str,
+    original_filename: Optional[str] = None,
 ) -> Generator[tuple, None, Dict[str, Any]]:
     """
     Generador que procesa un PDF y emite (step_name, progress_fraction).
     Al terminar retorna el dict de meta via StopIteration.value.
+
+    `original_filename` es el nombre real del PDF subido por el usuario; se
+    usa para nombrar la carpeta y los chunks. Si no se pasa, cae al stem del
+    path (que puede ser un archivo temporal `tmpXXXX`).
     """
-    paper_name = pdf_path.stem
+    source_name = original_filename or pdf_path.name
+    paper_name = Path(source_name).stem
     sanitized_name = sanitize_collection_name(paper_name)
     collection_name = f"paper_{sanitized_name}_paragraphs"
     paper_dir = output_dir / sanitized_name
@@ -300,7 +306,7 @@ def process_pdf(
         "processing_model": processing_model,
         "embedding_model": embedding_model,
         "total_chars": total_chars,
-        "filename": pdf_path.name,
+        "filename": source_name,
         "chroma_chunks_count": len(chroma_chunks),
         "faiss_chunks_count": len(faiss_chunks),
     }
@@ -319,12 +325,14 @@ def run_process_pdf(
     processing_model: str,
     embedding_model: str,
     on_progress=None,
+    original_filename: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Wrapper síncrono sobre el generador process_pdf."""
     result: Dict[str, Any] = {}
     gen = process_pdf(
         pdf_path, output_dir, processing_llm, embeddings,
         pdf_hash, processing_model, embedding_model,
+        original_filename=original_filename,
     )
     try:
         while True:
