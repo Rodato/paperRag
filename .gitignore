@@ -5,6 +5,9 @@
 # Datos del usuario (papers procesados, historial)
 data/
 
+# Material de revisión por pares (CONFIDENCIAL — no publicar)
+paper/
+
 # Virtualenvs
 .venv/
 venv/

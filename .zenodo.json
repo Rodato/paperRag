@@ -1,0 +1,26 @@
+{
+  "title": "paperRag: sistema multi-agente basado en RAG y LLMs para el análisis contextual de citas en documentos científicos",
+  "upload_type": "software",
+  "license": "MIT",
+  "creators": [
+    {
+      "name": "Otero, Daniel",
+      "orcid": "0000-0001-8451-302X",
+      "affiliation": "Universidad del Valle, Cali, Colombia"
+    },
+    {
+      "name": "Gutierrez de Piñerez Reyes, Raúl Ernesto",
+      "orcid": "0000-0001-9941-6206",
+      "affiliation": "Universidad del Valle, Cali, Colombia"
+    }
+  ],
+  "keywords": [
+    "natural language processing",
+    "information retrieval",
+    "text analysis",
+    "multi-agent systems",
+    "bibliometrics",
+    "retrieval augmented generation"
+  ],
+  "description": "Prototipo de software para el análisis contextual automático de referencias bibliográficas en artículos científicos. Integra procesamiento de lenguaje natural, generación aumentada por recuperación (RAG) sobre dos estrategias de indexación complementarias y una orquestación de cinco agentes especializados construida con LangGraph. Código asociado al artículo enviado a la revista TecnoLógicas."
+}
